@@ -1,0 +1,29 @@
+FROM Python:3.11-slim as Builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \ build-essential \ && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache dir --user -r requirements.txt
+
+# Final Hardened Runtime Stage
+FROM Python:3.11-slim AS runner
+
+WORKDIR /app
+
+# A non-privileged system user/group for defense compliance
+RUN groupadd -g 10001 appgroup && \ useradd -u 10001 -g appgroup -m -s /bin/bash appuser
+
+# Copy installed dependencies from the builder stage
+COPY --from=builder /root/.local /home/appuser/.local
+COPY src/gateway/ /app/
+
+# Ensure the database storage directory is owned by a non-root user
+RUN mkdir -p /app/data && chown -R appuser:appgroup /app/data
+
+USER appuser
+
+EXPOSE 5000
+
+CMD ["Python","app.py"]
